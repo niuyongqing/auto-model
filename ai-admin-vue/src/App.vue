@@ -2,7 +2,7 @@
   <div class="common-layout">
     <el-container>
       <el-header class="header">
-        <div class="logo">🚀 AI 广铺资产生成器</div>
+        <div class="logo">🚀 AI 资产生成器</div>
       </el-header>
 
       <el-main class="main-content">
@@ -33,7 +33,7 @@
               <el-icon class="el-icon--left">
                 <MagicStick />
               </el-icon>
-              {{ loading ? '正在生成多组Listing...' : '生成广铺方案' }}
+              {{ loading ? '正在生成多组Listing...' : '生成方案' }}
             </el-button>
           </div>
         </el-card>
@@ -96,7 +96,7 @@ const startGenerate = async () => {
     formData.append('productName', productName.value)
 
     // 注意：这里改成你的局域网 IP 或者 localhost
-    const response = await axios.post('http://localhost:3000/api/generate', formData, {
+    const response = await axios.post('http://localhost:3333/api/generate', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
 

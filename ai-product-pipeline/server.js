@@ -6,6 +6,8 @@ const fs = require('fs');
 const OSS = require('ali-oss');
 const OpenAI = require('openai');
 const fal = require("@fal-ai/serverless-client");
+const sharp = require('sharp'); // 【新增】用于图片处理
+const axios = require('axios'); // 【新增】用于下载图片流
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -58,6 +60,35 @@ async function uploadToOSS(filePath, originalName) {
 }
 
 /**
+ * 【新增核心函数】把 Bria 的透明图转换成 Flux 需要的黑白 Mask，并上传到 OSS
+ */
+async function createMaskAndUpload(transparentImageUrl) {
+    try {
+        // 1. 下载透明图
+        const response = await axios({ url: transparentImageUrl, responseType: 'arraybuffer' });
+        const inputBuffer = response.data;
+
+        // 2. 用 Sharp 处理：提取Alpha -> 转黑白 -> 反色
+        // 逻辑：透明部分(Alpha=0) -> 变黑(0) -> 反色成白(255) [白色=重画背景]
+        //      实体部分(Alpha=255) -> 变白(255) -> 反色成黑(0) [黑色=保留商品]
+        const maskBuffer = await sharp(inputBuffer)
+            .ensureAlpha()
+            .extractChannel(3)     // 提取 Alpha 通道
+            .toColourspace('b-w')  // 转灰度
+            .negate({ alpha: false }) // 反转颜色 (关键！)
+            .png()
+            .toBuffer();
+
+        // 3. 上传 Mask 到 OSS 以获取 URL
+        const maskUrl = await uploadToOSS(maskBuffer, 'mask.png');
+        return maskUrl;
+    } catch (error) {
+        console.error("蒙版生成失败:", error);
+        throw error;
+    }
+}
+
+/**
  * 第一步：视觉分析与策略生成 (Qwen-VL-Max)
  */
 async function analyzeAndGetStrategies(imageUrl, productName) {
@@ -100,68 +131,71 @@ async function analyzeAndGetStrategies(imageUrl, productName) {
 }
 
 /**
- * 第二步：抠图 + 保真重绘 (Flux Fill)
- * 这是保持商品长相不变的关键！
+ * 【修正】生成最终图片
+ * 使用 flux-pro/v1/fill，传入 原图 + 蒙版 + 提示词
  */
-async function generateConsistentImage(item, transparentImageUrl) {
-    console.log(`[2/3] Flux 正在绘制背景: ${item.style}...`);
+async function generateConsistentImage(item, originalUrl, maskUrl) {
+    console.log(`[3/4] Flux Fill 正在重绘背景: ${item.style}...`);
 
-    // 调用 Flux.1 Fill 模型
-    // 这个模型专门用于：给定一张透明底图，填充背景
-    const result = await fal.subscribe("fal-ai/flux/pro/v1.1/fill", {
+    const result = await fal.subscribe("fal-ai/flux-pro/v1/fill", {
         input: {
-            image_url: transparentImageUrl, // 传入已抠图的透明商品
-            prompt: `product photography, ${item.image_prompt}, high quality, 8k, photorealistic, cinematic lighting, no text`,
-            guidance_scale: 30, // 较高的引导值有助于保持物体边缘
-            seed: Math.floor(Math.random() * 10000000), // 随机种子
+            prompt: item.image_prompt,
+            image_url: originalUrl, // 【重点】这里传原始拍摄的图
+            mask_url: maskUrl,      // 【重点】这里传我们算出来的黑白蒙版
+            guidance_scale: 30,     // 稍微高一点，让它严格遵守蒙版
             output_format: "jpeg",
             sync_mode: true
-        }
+        },
+        logs: true
     });
 
-    return result.images[0].url;
+    return result.data.images[0].url; // 注意 Fal 返回结构可能是 data.images
 }
 
 // === 3. API 路由 ===
 
 app.post('/api/generate', upload.single('file'), async (req, res) => {
     const filePath = req.file?.path;
-
+    
     try {
         if (!filePath) return res.status(400).json({ error: '请上传图片' });
         const productName = req.body.productName || "Product";
 
         console.log("=== 新任务开始 ===");
 
-        // 1. 上传原图到 OSS (为了给 AI 传 URL)
-        console.log("正在上传原图到 OSS...");
+        // 1. 上传原图
         const originalUrl = await uploadToOSS(filePath, req.file.originalname);
         console.log("原图 URL:", originalUrl);
 
-        // 2. 并行执行：(A) Qwen 分析策略  (B) 预先抠图
-        console.log("正在并行执行：策略分析 & 智能抠图...");
-
-        const [strategies, rembgResult] = await Promise.all([
-            // A. 让 Qwen 出方案
-            analyzeAndGetStrategies(originalUrl, productName),
-
-            // B. 调用 Fal 去除背景 (得到透明底图)
-            fal.subscribe("fal-ai/image-utils/remove-background", {
+        // 2. 并行：分析策略 + 抠图 (用 Bria 模型)
+        console.log("正在执行：策略分析 & 智能抠图...");
+        
+        // 修正：这里不能用 Promise.all 简单的并行，因为我们需要先拿到 Bria 的结果来做 Mask
+        // 但 Qwen 和 Bria 可以并行
+        const [strategies, briaResult] = await Promise.all([
+            analyzeAndGetStrategies(originalUrl, productName), // 您的 Qwen 函数
+            
+            // 【修正】使用 Bria RMBG 2.0 去背景
+            fal.subscribe("fal-ai/bria/background/remove", {
                 input: { image_url: originalUrl }
             })
         ]);
 
-        const transparentUrl = rembgResult.image.url;
-        console.log("抠图完成，策略已生成。开始批量生图...");
+        const transparentPngUrl = briaResult.data.image.url; 
+        console.log("抠图完成(透明图):", transparentPngUrl);
 
-        // 3. 根据 3 个策略，并发生成 3 张图 (使用 Flux Fill)
+        // 3. 【新增】制作黑白蒙版
+        console.log("正在生成黑白蒙版...");
+        const maskUrl = await createMaskAndUpload(transparentPngUrl);
+        console.log("蒙版 URL:", maskUrl);
+
+        // 4. 批量裂变
+        console.log(`开始生成 ${strategies.length} 张变体...`);
+        
         const generateTasks = strategies.map(async (strategy) => {
-            // 使用透明底图 + Qwen 写的 Prompt 进行重绘
-            const finalImageUrl = await generateConsistentImage(strategy, transparentUrl);
-
-            // (可选优化) 你可以在这里把 finalImageUrl 再转存回 OSS，变成永久链接
-            // const permanentUrl = await uploadToOSS(downloadStream(finalImageUrl), 'result.jpg');
-
+            // 传入: 策略, 原图URL, 蒙版URL
+            const finalImageUrl = await generateConsistentImage(strategy, originalUrl, maskUrl);
+            
             return {
                 style: strategy.style,
                 title: strategy.title,
@@ -171,20 +205,20 @@ app.post('/api/generate', upload.single('file'), async (req, res) => {
 
         const finalResults = await Promise.all(generateTasks);
 
-        // 4. 清理本地临时文件
+        // 清理
         fs.unlinkSync(filePath);
-
-        console.log("=== 任务完成，返回结果 ===");
+        
+        console.log("=== 任务完成 ===");
         res.json({ success: true, data: finalResults });
 
     } catch (error) {
         console.error("流水线出错:", error);
-        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath); // 出错也要清理垃圾
+        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-const PORT = 3000;
+const PORT = 3333;
 app.listen(PORT, () => {
-    console.log(`广铺生成引擎已启动: http://localhost:${PORT}`);
+    console.log(`生成引擎已启动: http://localhost:${PORT}`);
 });

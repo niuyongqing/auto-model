@@ -61,7 +61,7 @@ async function generateImage(prompt) {
     const fullPrompt = `professional product photography, center subject, ${prompt}, 8k resolution, photorealistic, cinematic lighting, no text, no watermark, blurry background`;
 
     const response = await siliconClient.images.generate({
-        model: "black-forest-labs/FLUX.1-schnell", // 推荐用 Schnell 版：速度极快(1秒出图)，成本极低，适合广铺
+        model: "black-forest-labs/FLUX.1-schnell", // 推荐用 Schnell 版：速度极快(1秒出图)，成本极低，适合
         prompt: fullPrompt,
         size: "1024x1024",
         n: 1
@@ -71,7 +71,7 @@ async function generateImage(prompt) {
 }
 
 /**
- * 主流程：广铺发动机
+ * 主流程：发动机
  */
 async function main() {
     // ⚠️ 注意：这里必须是一个公网可访问的 URL。
