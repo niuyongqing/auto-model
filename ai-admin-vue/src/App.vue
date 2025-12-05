@@ -220,7 +220,6 @@ const downloadImage = (url, index) => {
 }
 
 .header-inner {
-  max-width: 1200px;
   margin: 0 auto;
   height: 60px;
   display: flex;
