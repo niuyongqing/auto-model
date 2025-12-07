@@ -1,11 +1,67 @@
 {
   "name": "auto-image",
   "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "ai-admin-vue",
+    "ai-backend-nest"
+  ],
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+
+    "install:all": "npm install", 
+    "install:frontend": "npm install -w ai-admin-vue",
+    "install:backend": "npm install -w ai-backend-nest",
+    
+
+    "start": "npm run start:backend",
+    "start:frontend": "npm run dev -w ai-admin-vue",
+    "start:backend": "npm run start:dev -w ai-backend-nest",
+
+
+    "dev": "concurrently --kill-others --restart-tries=0 -n \"FRONTEND,BACKEND\" -c \"green.bold,blue.bold\" \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "npm run dev -w ai-admin-vue",
+    "dev:backend": "npm run start:dev -w ai-backend-nest",
+    
+
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "npm run build -w ai-admin-vue",
+    "build:backend": "npm run build -w ai-backend-nest",
+    
+
+    "test": "npm run test -w ai-admin-vue && npm run test -w ai-backend-nest",
+    "test:frontend": "npm run test -w ai-admin-vue",
+    "test:backend": "npm run test -w ai-backend-nest",
+    
+
+    "clean": "npm run clean:node_modules && npm run clean:build",
+    "clean:node_modules": "rimraf node_modules && cd ai-admin-vue && rimraf node_modules && cd ../ai-backend-nest && rimraf node_modules",
+    "clean:build": "rimraf dist && cd ai-admin-vue && rimraf dist && cd ../ai-backend-nest && rimraf dist",
+    
+    "remove-bg": "cd ai-backend-nest && npm run remove-bg",
+    "build:scripts": "cd ai-backend-nest && npm run build:scripts",
+    
+
+    "deploy:preview": "npm run build && echo '构建完成，准备部署...'",
+    "deploy:production": "npm run build && echo '构建完成，准备部署到生产环境...'"
   },
-  "author": "",
+  "keywords": [
+    "ai",
+    "image-processing",
+    "nest",
+    "vue",
+    "fullstack"
+  ],
+  "author": "Your Name",
   "license": "ISC",
-  "description": ""
+  "description": "全栈AI图片处理平台 - 包含Vue前端和NestJS后端",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5",
+    "npm-run-all": "^4.1.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
 }
