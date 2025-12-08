@@ -30,6 +30,10 @@ export default tseslint.config(
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
       "prettier/prettier": ["error", { endOfLine: "auto" }],
+      '@typescript-eslint/no-unsafe-assignment': 'off',   // 屏蔽 "Unsafe assignment of an `any` value"
+      '@typescript-eslint/no-unsafe-member-access': 'off', // 屏蔽对 any 类型属性的访问
+      '@typescript-eslint/no-unsafe-call': 'off',          // 屏蔽 "Unsafe construction/call"
+      '@typescript-eslint/no-unsafe-return': 'off',
     },
   },
 );

@@ -8,7 +8,7 @@
           <span class="app-title">AI 电商工作台</span>
         </div>
 
-        <el-menu :default-active="activeMenu" class="el-menu-vertical" background-color="#1c1e23" text-color="#a6adb4"
+        <el-menu :default-active="activeMenu" class="el-menu-vertical" background-color="#001529" text-color="#a6adb4"
           active-text-color="#fff" @select="handleMenuSelect">
           <el-menu-item index="image">
             <el-icon>
@@ -69,7 +69,7 @@ body {
 
 /* 侧边栏 */
 .app-sidebar {
-  background-color: #1c1e23;
+  background-color: #001529;
   color: white;
   display: flex;
   flex-direction: column;
@@ -80,8 +80,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #1c1e23;
-  border-bottom: 1px solid #1c1e23;
+  background-color: #001529;
+  border-bottom: 1px solid #001529;
 }
 
 .logo-icon {

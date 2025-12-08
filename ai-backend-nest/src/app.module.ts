@@ -9,9 +9,9 @@ import { VideoModule } from './video/video.module'; // ✅ 导入 Video
   imports: [
     ConfigModule.forRoot({ envFilePath: '.env' }),
     ImageModule, // 注册
-    VideoModule  // 注册
+    VideoModule, // 注册
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}
